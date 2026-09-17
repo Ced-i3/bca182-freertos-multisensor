@@ -23,6 +23,13 @@
       "top": 96,
       "left": 201.6,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir",
+      "top": 192,
+      "left": 201.6,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -31,6 +38,9 @@
     [ "dht22:SDA", "bluepill:A1", "green", [ "v0" ] ],
     [ "ldr:VCC", "bluepill:3.3", "red", [ "v0" ] ],
     [ "ldr:GND", "bluepill:GND.1", "black", [ "v0" ] ],
-    [ "ldr:AO", "bluepill:A0", "blue", [ "v0" ] ]
+    [ "ldr:AO", "bluepill:A0", "blue", [ "v0" ] ],
+    [ "pir:VCC", "bluepill:3.3", "red", [ "v0" ] ],
+    [ "pir:GND", "bluepill:GND.1", "black", [ "v0" ] ],
+    [ "pir:OUT", "bluepill:B0", "purple", [ "v0" ] ]
   ]
 }

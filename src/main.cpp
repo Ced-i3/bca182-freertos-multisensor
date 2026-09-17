@@ -1,5 +1,7 @@
 #include "stm32f1xx_hal.h"
+#include "motion.h"
 #include "sensors.h"
+#include "system_state.h"
 #include <cstring>
 
 extern "C" {
@@ -131,12 +133,8 @@ void SensorTask(void *pvParameters)
 
         if (dhtReadOk && ldrReadOk)
         {
-            /*
-             * PIR acquisition belongs to a later milestone. Initialize
-             * its required payload field to the inactive baseline rather
-             * than sending an indeterminate value.
-             */
-            sensorData.motionDetected = false;
+            /* StateTask owns the synchronized motion/activity snapshot. */
+            sensorData.motionDetected = SystemState_IsMotionDetected();
 
             /*
              * Do not block this periodic task if no consumer is ready yet.
@@ -171,6 +169,9 @@ void app_main()
 
     /* Initialize the DHT22 data line on PA1. */
     DHT22_Init(GPIOA, GPIO_PIN_1);
+
+    /* PB0 is the unused PIR output pin. */
+    PIR_Init(GPIOB, GPIO_PIN_0);
 
     /*
      * Create the mutex before using Serial_Print().
@@ -241,6 +242,15 @@ void app_main()
             nullptr,
             sensorTaskPriority,
             nullptr) != pdPASS)
+    {
+        Error_Handler();
+    }
+
+    /*
+     * StateTask owns the ACTIVE/INACTIVE state machine. MotionTask is
+     * created after it so PIR notifications always have a valid receiver.
+     */
+    if (!SystemState_CreateTask() || !MotionTask_Create())
     {
         Error_Handler();
     }
