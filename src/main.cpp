@@ -1,23 +1,37 @@
 #include "stm32f1xx_hal.h"
+#include "sensors.h"
 #include <cstring>
 
 extern "C" {
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
+#include "queue.h"
 }
 
 UART_HandleTypeDef huart1;
+ADC_HandleTypeDef hadc1;
 
 SemaphoreHandle_t serialMutex;
+QueueHandle_t sensorQueue;
+
+namespace
+{
+    constexpr UBaseType_t sensorTaskPriority = 2;
+    constexpr uint16_t sensorTaskStackSize = 256;
+    constexpr UBaseType_t sensorQueueLength = 4;
+    constexpr uint32_t sensorPeriodMs = 2000;
+}
 
 /* Function prototypes */
 void SystemClock_Config();
 static void MX_GPIO_Init();
 static void MX_USART1_UART_Init();
+static void MX_ADC1_Init();
 
 void TaskA(void *pvParameters);
 void TaskB(void *pvParameters);
+void SensorTask(void *pvParameters);
 
 void Error_Handler();
 
@@ -91,6 +105,51 @@ void TaskB(void *pvParameters)
 }
 
 /* ---------------------------------------------------------
+ * SensorTask
+ *
+ * Priority: 2
+ * Period:   2000 ms
+ *
+ * DHT22 uses PA1. The LDR analog output uses PA0 / ADC1 channel 0.
+ * A failed DHT22 or ADC read is not sent, so consumers never receive
+ * fabricated sensor values.
+ * --------------------------------------------------------- */
+void SensorTask(void *pvParameters)
+{
+    (void)pvParameters;
+
+    TickType_t lastWakeTime = xTaskGetTickCount();
+
+    for (;;)
+    {
+        SensorData sensorData = {};
+
+        bool dhtReadOk = DHT22_Read(
+            &sensorData.temperature,
+            &sensorData.humidity);
+        bool ldrReadOk = LDR_Read(&hadc1, &sensorData.lightLevel);
+
+        if (dhtReadOk && ldrReadOk)
+        {
+            /*
+             * PIR acquisition belongs to a later milestone. Initialize
+             * its required payload field to the inactive baseline rather
+             * than sending an indeterminate value.
+             */
+            sensorData.motionDetected = false;
+
+            /*
+             * Do not block this periodic task if no consumer is ready yet.
+             * The sample is dropped when the bounded queue is full.
+             */
+            (void)xQueueSend(sensorQueue, &sensorData, 0);
+        }
+
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(sensorPeriodMs));
+    }
+}
+
+/* ---------------------------------------------------------
  * Application entry point
  * --------------------------------------------------------- */
 void app_main()
@@ -107,12 +166,28 @@ void app_main()
     /* Initialize USART1 */
     MX_USART1_UART_Init();
 
+    /* Initialize ADC1 channel 0 for the LDR on PA0. */
+    MX_ADC1_Init();
+
+    /* Initialize the DHT22 data line on PA1. */
+    DHT22_Init(GPIOA, GPIO_PIN_1);
+
     /*
      * Create the mutex before using Serial_Print().
      */
     serialMutex = xSemaphoreCreateMutex();
 
     if (serialMutex == nullptr)
+    {
+        Error_Handler();
+    }
+
+    /*
+     * A four-element queue buffers SensorData samples for later consumers.
+     */
+    sensorQueue = xQueueCreate(sensorQueueLength, sizeof(SensorData));
+
+    if (sensorQueue == nullptr)
     {
         Error_Handler();
     }
@@ -150,6 +225,21 @@ void app_main()
             256,
             nullptr,
             1,
+            nullptr) != pdPASS)
+    {
+        Error_Handler();
+    }
+
+    /*
+     * SensorTask uses the laboratory's suggested priority 2 and samples
+     * every two seconds using vTaskDelayUntil().
+     */
+    if (xTaskCreate(
+            SensorTask,
+            "SensorTask",
+            sensorTaskStackSize,
+            nullptr,
+            sensorTaskPriority,
             nullptr) != pdPASS)
     {
         Error_Handler();
@@ -286,6 +376,52 @@ static void MX_USART1_UART_Init()
     huart1.Init.OverSampling = UART_OVERSAMPLING_16;
 
     if (HAL_UART_Init(&huart1) != HAL_OK)
+    {
+        Error_Handler();
+    }
+}
+
+/* ---------------------------------------------------------
+ * ADC1 / LDR
+ *
+ * PA0 is ADC1 channel 0 and does not conflict with USART1 (PA9/PA10),
+ * DHT22 (PA1), or the Blue Pill LED (PC13).
+ * --------------------------------------------------------- */
+static void MX_ADC1_Init()
+{
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    ADC_ChannelConfTypeDef ADC_ChannelConfig = {0};
+
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_ADC1_CLK_ENABLE();
+
+    GPIO_InitStruct.Pin = GPIO_PIN_0;
+    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    hadc1.Instance = ADC1;
+    hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+    hadc1.Init.ContinuousConvMode = DISABLE;
+    hadc1.Init.DiscontinuousConvMode = DISABLE;
+    hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+    hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+    hadc1.Init.NbrOfConversion = 1;
+
+    if (HAL_ADC_Init(&hadc1) != HAL_OK)
+    {
+        Error_Handler();
+    }
+
+    ADC_ChannelConfig.Channel = ADC_CHANNEL_0;
+    ADC_ChannelConfig.Rank = ADC_REGULAR_RANK_1;
+    ADC_ChannelConfig.SamplingTime = ADC_SAMPLETIME_55CYCLES_5;
+
+    if (HAL_ADC_ConfigChannel(&hadc1, &ADC_ChannelConfig) != HAL_OK)
+    {
+        Error_Handler();
+    }
+
+    if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
     {
         Error_Handler();
     }

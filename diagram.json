@@ -9,6 +9,28 @@
       "top": 0,
       "left": 0,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht22",
+      "top": -68.4,
+      "left": 196.8,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr",
+      "top": 96,
+      "left": 201.6,
+      "attrs": {}
     }
+  ],
+  "connections": [
+    [ "dht22:VCC", "bluepill:3.3", "red", [ "v0" ] ],
+    [ "dht22:GND", "bluepill:GND.1", "black", [ "v0" ] ],
+    [ "dht22:SDA", "bluepill:A1", "green", [ "v0" ] ],
+    [ "ldr:VCC", "bluepill:3.3", "red", [ "v0" ] ],
+    [ "ldr:GND", "bluepill:GND.1", "black", [ "v0" ] ],
+    [ "ldr:AO", "bluepill:A0", "blue", [ "v0" ] ]
   ]
 }
