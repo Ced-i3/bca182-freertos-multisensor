@@ -30,6 +30,27 @@
       "top": 192,
       "left": 201.6,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-ky-040",
+      "id": "encoder",
+      "top": 285.6,
+      "left": 196.8,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-ssd1306-i2c",
+      "id": "oled",
+      "top": 28,
+      "left": -86.4,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 385,
+      "left": 225.6,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -41,6 +62,16 @@
     [ "ldr:AO", "bluepill:A0", "blue", [ "v0" ] ],
     [ "pir:VCC", "bluepill:3.3", "red", [ "v0" ] ],
     [ "pir:GND", "bluepill:GND.1", "black", [ "v0" ] ],
-    [ "pir:OUT", "bluepill:B0", "purple", [ "v0" ] ]
+    [ "pir:OUT", "bluepill:B0", "purple", [ "v0" ] ],
+    [ "encoder:VCC", "bluepill:3.3", "red", [ "v0" ] ],
+    [ "encoder:GND", "bluepill:GND.1", "black", [ "v0" ] ],
+    [ "encoder:CLK", "bluepill:B10", "orange", [ "v0" ] ],
+    [ "encoder:DT", "bluepill:B11", "yellow", [ "v0" ] ],
+    [ "oled:VCC", "bluepill:3.3", "red", [ "v0" ] ],
+    [ "oled:GND", "bluepill:GND.1", "black", [ "v0" ] ],
+    [ "oled:SCL", "bluepill:B6", "cyan", [ "v0" ] ],
+    [ "oled:SDA", "bluepill:B7", "magenta", [ "v0" ] ],
+    [ "buzzer:+", "bluepill:B1", "orange", [ "v0" ] ],
+    [ "buzzer:-", "bluepill:GND.1", "black", [ "v0" ] ]
   ]
 }

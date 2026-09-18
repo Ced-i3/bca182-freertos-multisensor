@@ -1,4 +1,7 @@
 #include "stm32f1xx_hal.h"
+#include "alarm.h"
+#include "display.h"
+#include "input.h"
 #include "motion.h"
 #include "sensors.h"
 #include "system_state.h"
@@ -13,6 +16,7 @@ extern "C" {
 
 UART_HandleTypeDef huart1;
 ADC_HandleTypeDef hadc1;
+I2C_HandleTypeDef hi2c1;
 
 SemaphoreHandle_t serialMutex;
 QueueHandle_t sensorQueue;
@@ -30,6 +34,7 @@ void SystemClock_Config();
 static void MX_GPIO_Init();
 static void MX_USART1_UART_Init();
 static void MX_ADC1_Init();
+static void MX_I2C1_Init();
 
 void TaskA(void *pvParameters);
 void TaskB(void *pvParameters);
@@ -164,14 +169,23 @@ void app_main()
     /* Initialize USART1 */
     MX_USART1_UART_Init();
 
+    /* Initialize I2C1 for SSD1306 OLED (PB6=SCL, PB7=SDA). */
+    MX_I2C1_Init();
+
     /* Initialize ADC1 channel 0 for the LDR on PA0. */
     MX_ADC1_Init();
 
     /* Initialize the DHT22 data line on PA1. */
     DHT22_Init(GPIOA, GPIO_PIN_1);
 
-    /* PB0 is the unused PIR output pin. */
+    /* PB0 is the PIR output pin. */
     PIR_Init(GPIOB, GPIO_PIN_0);
+
+    /* PB10 and PB11 are the rotary-encoder CLK and DT inputs. */
+    Encoder_Init(GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11);
+
+    /* PB1 is the buzzer output pin. */
+    Buzzer_Init(GPIOB, GPIO_PIN_1);
 
     /*
      * Create the mutex before using Serial_Print().
@@ -250,7 +264,22 @@ void app_main()
      * StateTask owns the ACTIVE/INACTIVE state machine. MotionTask is
      * created after it so PIR notifications always have a valid receiver.
      */
-    if (!SystemState_CreateTask() || !MotionTask_Create())
+    if (!SystemState_CreateTask() ||
+        !MotionTask_Create() ||
+        !InputTask_Create())
+    {
+        Error_Handler();
+    }
+
+    /*
+     * Initialize the SSD1306 OLED display.
+     */
+    Display_Init(&hi2c1);
+
+    /*
+     * Create DisplayTask (priority 2) and AlarmTask (priority 2).
+     */
+    if (!DisplayTask_Create() || !AlarmTask_Create())
     {
         Error_Handler();
     }
@@ -432,6 +461,47 @@ static void MX_ADC1_Init()
     }
 
     if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
+    {
+        Error_Handler();
+    }
+}
+
+/* ---------------------------------------------------------
+ * I2C1 / SSD1306 OLED
+ *
+ * PB6 = I2C1 SCL
+ * PB7 = I2C1 SDA
+ * Clock = 100 kHz (standard mode)
+ * --------------------------------------------------------- */
+static void MX_I2C1_Init()
+{
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_I2C1_CLK_ENABLE();
+
+    /* PB6 - I2C1 SCL */
+    GPIO_InitStruct.Pin   = GPIO_PIN_6;
+    GPIO_InitStruct.Mode  = GPIO_MODE_AF_OD;
+    GPIO_InitStruct.Pull  = GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    /* PB7 - I2C1 SDA */
+    GPIO_InitStruct.Pin = GPIO_PIN_7;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    hi2c1.Instance             = I2C1;
+    hi2c1.Init.ClockSpeed      = 100000;
+    hi2c1.Init.DutyCycle       = I2C_DUTYCYCLE_2;
+    hi2c1.Init.OwnAddress1     = 0;
+    hi2c1.Init.AddressingMode  = I2C_ADDRESSINGMODE_7BIT;
+    hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+    hi2c1.Init.OwnAddress2     = 0;
+    hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+    hi2c1.Init.NoStretchMode   = I2C_NOSTRETCH_DISABLE;
+
+    if (HAL_I2C_Init(&hi2c1) != HAL_OK)
     {
         Error_Handler();
     }
