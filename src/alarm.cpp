@@ -17,6 +17,16 @@ static constexpr float TEMP_LOW  = 18.0f;
 static constexpr float TEMP_HIGH = 30.0f;
 
 /* ============================================================
+ * Pure decision function
+ * ============================================================ */
+
+bool EvaluateTemperature(float temperature, ActivityState state)
+{
+    return (temperature < TEMP_LOW || temperature > TEMP_HIGH)
+           && state == ActivityState::ACTIVE;
+}
+
+/* ============================================================
  * Buzzer GPIO
  * ============================================================ */
 
@@ -75,16 +85,9 @@ static void AlarmTask(void *pvParameters)
         /* Peek the latest sensor sample without consuming it. */
         (void)xQueuePeek(sensorQueue, &sensorData, 0);
 
-        bool alarmActive = false;
-
-        if (sensorData.temperature < TEMP_LOW ||
-            sensorData.temperature > TEMP_HIGH)
-        {
-            if (SystemState_GetActivityState() == ActivityState::ACTIVE)
-            {
-                alarmActive = true;
-            }
-        }
+        bool alarmActive = EvaluateTemperature(
+            sensorData.temperature,
+            SystemState_GetActivityState());
 
         if (alarmActive)
         {

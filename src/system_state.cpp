@@ -38,18 +38,25 @@ namespace
              * reported by MotionTask. Waiting here blocks StateTask without
              * polling or busy-waiting.
              */
-            if (ulTaskNotifyTake(
+            bool notified = ulTaskNotifyTake(
                     pdTRUE,
-                    pdMS_TO_TICKS(inactivityTimeoutMs)) > 0)
-            {
-                SetState(ActivityState::ACTIVE, true);
-            }
-            else
-            {
-                SetState(ActivityState::INACTIVE, false);
-            }
+                    pdMS_TO_TICKS(inactivityTimeoutMs)) > 0;
+
+            ActivityState newState = EvaluateSystemState(notified);
+            SetState(newState, notified);
         }
     }
+}
+
+/* ============================================================
+ * Pure decision function
+ * ============================================================ */
+
+ActivityState EvaluateSystemState(bool notificationReceived)
+{
+    return notificationReceived
+        ? ActivityState::ACTIVE
+        : ActivityState::INACTIVE;
 }
 
 bool SystemState_CreateTask()

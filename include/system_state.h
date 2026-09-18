@@ -18,6 +18,12 @@ bool SystemState_CreateTask();
 void SystemState_NotifyMotionDetected();
 
 /*
+ * Pure decision function: returns ACTIVE when a motion notification
+ * has arrived, or INACTIVE on timeout.
+ */
+ActivityState EvaluateSystemState(bool notificationReceived);
+
+/*
  * Thread-safe snapshots for tasks that include activity data in their output.
  */
 ActivityState SystemState_GetActivityState();
