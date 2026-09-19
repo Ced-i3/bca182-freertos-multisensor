@@ -1,5 +1,5 @@
 /*
- * test/test_temperature.cpp
+ * test/test_temperature/test_temperature.cpp
  *
  * Unit tests for EvaluateTemperature() — M6 requirement.
  *
@@ -8,6 +8,13 @@
  */
 #include <unity.h>
 #include "alarm.h"
+
+/* Forward declarations */
+void test_below_threshold(void);
+void test_at_lower_bound(void);
+void test_in_normal_range(void);
+void test_at_upper_bound(void);
+void test_above_threshold(void);
 
 void setup() {
     UNITY_BEGIN();

@@ -1,5 +1,5 @@
 /*
- * test/test_system_state.cpp
+ * test/test_system_state/test_system_state.cpp
  *
  * Unit tests for EvaluateSystemState() — M6 requirement.
  *
@@ -10,6 +10,12 @@
  */
 #include <unity.h>
 #include "system_state.h"
+
+/* Forward declarations */
+void test_notification_sets_active(void);
+void test_timeout_sets_inactive(void);
+void test_repeated_notification_stays_active(void);
+void test_consecutive_timeouts_stay_inactive(void);
 
 void setup() {
     UNITY_BEGIN();

@@ -17,6 +17,13 @@
 
 typedef struct { int dummy; } GPIO_TypeDef;
 
+extern GPIO_TypeDef _mock_gpioA;
+extern GPIO_TypeDef _mock_gpioB;
+extern GPIO_TypeDef _mock_gpioC;
+#define GPIOA (&_mock_gpioA)
+#define GPIOB (&_mock_gpioB)
+#define GPIOC (&_mock_gpioC)
+
 typedef enum {
     GPIO_PIN_RESET = 0U,
     GPIO_PIN_SET   = 1U

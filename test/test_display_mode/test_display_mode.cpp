@@ -1,5 +1,5 @@
 /*
- * test/test_display_mode.cpp
+ * test/test_display_mode/test_display_mode.cpp
  *
  * Unit tests for NextDisplayMode() and PreviousDisplayMode() — M6 requirement.
  *
@@ -9,6 +9,12 @@
  */
 #include <unity.h>
 #include "input.h"
+
+/* Forward declarations */
+void test_next_temperature_to_humidity(void);
+void test_next_motion_wraps_to_temperature(void);
+void test_previous_humidity_to_temperature(void);
+void test_previous_temperature_wraps_to_motion(void);
 
 void setup() {
     UNITY_BEGIN();
