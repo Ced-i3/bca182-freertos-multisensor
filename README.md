@@ -33,6 +33,18 @@ pages via a rotary encoder.
 | UART1 RX | PA10 | USART1 RX | Input |
 | Onboard LED | PC13 | GPIO output (active-low) | Output |
 
+## Documentation Visuals
+
+### System Architecture
+
+![System Architecture](docs/images/system-architecture.png)
+
+### Wokwi Running System / Circuit
+
+![Wokwi Running System / Circuit](docs/images/wokwi-circuit.png)
+
+*The Wokwi simulation starts and prints "BCA182 FreeRTOS Multisensor" and "System starting..." to the serial monitor. The screenshot demonstrates the configured and running Wokwi simulation. Runtime behavior of individual sensors, OLED output, and encoder interaction was not reliably verified through Wokwi simulation.*
+
 ## FreeRTOS Architecture
 
 Eight application tasks using FreeRTOS preemptive multitasking with shared
@@ -173,7 +185,12 @@ page changes occur while INACTIVE.
 +-- lib/
 |   +-- FreeRTOS/           # FreeRTOS kernel sources (ARM_CM3 port)
 +-- docs/
-|   +-- laboratory-report.pdf
+|   +-- laboratory-report-final.pdf
+|   +-- images/
+|       +-- system-architecture.png
+|       +-- task-communication.png
+|       +-- state-machine.png
+|       +-- wokwi-circuit.png
 +-- diagram.json            # Wokwi circuit diagram
 +-- wokwi.toml              # Wokwi firmware paths
 +-- platformio.ini          # Build configuration
@@ -277,3 +294,45 @@ in `diagram.json`.
 - **Native unit tests** use small HAL and FreeRTOS mocks (`stm32f1xx_hal.h`
   and `FreeRTOS.h` at the project root) that stub all hardware access. The
   mocks compile to empty on STM32 builds via `#ifdef UNIT_TEST` guards.
+
+## Fault Experiments
+
+Three controlled fault experiments were performed to demonstrate the importance
+of FreeRTOS scheduling and synchronization primitives. Each experiment
+temporarily introduced a single fault, observed the theoretical effect, then
+restored the original code.
+
+### Experiment 1: Remove Blocking Delay
+
+- **Target:** TaskA (`src/main.cpp`)
+- **Fault:** `vTaskDelay(pdMS_TO_TICKS(1000))` temporarily commented out
+- **Expected theoretical effect:** TaskA enters a tight loop without yielding,
+  monopolizing CPU time and starving lower-priority TaskB (priority 1).
+  Same-priority tasks experience degraded timing due to timeslice competition.
+  The onboard LED (PC13) would toggle at maximum speed instead of once per second.
+- **Observed effect:** Runtime behavior could not be reliably observed in Wokwi.
+  Theoretical analysis confirms CPU monopolization and task starvation.
+- **Restoration:** Original delay restored. No permanent changes.
+
+### Experiment 2: Excessively High Task Priority
+
+- **Target:** TaskB (`src/main.cpp`)
+- **Fault:** Priority temporarily changed from 1 to 5 (`configMAX_PRIORITIES - 1`)
+- **Expected theoretical effect:** TaskB preempts all other tasks, including
+  safety-critical MotionTask (priority 3). A diagnostic print task gains higher
+  priority than motion detection, inverting the intended priority design.
+  System timing is disrupted whenever TaskB wakes.
+- **Observed effect:** Runtime behavior could not be reliably observed in Wokwi.
+  Theoretical analysis confirms priority inversion and timing degradation.
+- **Restoration:** Original priority (1) restored. No permanent changes.
+
+### Experiment 3: Remove Serial Mutex
+
+- **Target:** `serialMutex` in `Serial_Print()` (`src/main.cpp`)
+- **Fault:** `xSemaphoreTake()` and `xSemaphoreGive()` temporarily bypassed
+- **Expected theoretical effect:** Multiple tasks call `HAL_UART_Transmit()`
+  concurrently, causing interleaved or corrupted serial output. Message order
+  becomes nondeterministic depending on scheduling decisions.
+- **Observed effect:** Runtime behavior could not be reliably observed in Wokwi.
+  Theoretical analysis confirms output corruption and nondeterminism.
+- **Restoration:** Original mutex protection restored. No permanent changes.
