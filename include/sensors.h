@@ -9,6 +9,7 @@ struct SensorData
     float humidity;
     int lightLevel;
     bool motionDetected;
+    bool dhtValid;   /* true only when DHT22_Read succeeded */
 };
 
 /*
