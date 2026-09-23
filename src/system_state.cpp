@@ -6,6 +6,9 @@ extern "C"
 #include "task.h"
 }
 
+/* Defined in main.cpp — prints a line to USART1 with mutex protection. */
+extern void Serial_Print(const char *message);
+
 namespace
 {
     constexpr UBaseType_t stateTaskPriority = 2;
@@ -30,6 +33,7 @@ namespace
 
         /* The room begins ACTIVE and becomes inactive after no PIR events. */
         SetState(ActivityState::ACTIVE, false);
+        Serial_Print("State: ACTIVE\r\n");
 
         for (;;)
         {
@@ -44,6 +48,11 @@ namespace
 
             ActivityState newState = EvaluateSystemState(notified);
             SetState(newState, notified);
+
+            if (newState == ActivityState::ACTIVE)
+                Serial_Print("State: ACTIVE\r\n");
+            else
+                Serial_Print("State: INACTIVE\r\n");
         }
     }
 }
