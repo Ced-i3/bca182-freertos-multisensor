@@ -69,4 +69,12 @@
 
 /*-----------------------------------------------------------*/
 
+/*
+ * Map FreeRTOS handler names to the STM32 vector table names.
+ * Without these defines, the PendSV and SVC interrupts fall
+ * through to Default_Handler and context switches never happen.
+ */
+#define vPortSVCHandler    SVC_Handler
+#define xPortPendSVHandler PendSV_Handler
+
 #endif /* FREERTOS_CONFIG_H */
