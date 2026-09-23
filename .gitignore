@@ -4,3 +4,10 @@
 .vscode/launch.json
 .vscode/ipch
 LAB_INSTRUCTIONS.docx
+
+# Wokwi generated artifacts
+wokwi*.vcd
+wokwi-*.log
+wokwi-output.txt
+wokwi_stderr.txt
+wokwi_stdout.txt
