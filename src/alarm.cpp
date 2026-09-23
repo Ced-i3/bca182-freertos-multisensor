@@ -79,22 +79,35 @@ static void AlarmTask(void *pvParameters)
 
     extern QueueHandle_t sensorQueue;
     SensorData sensorData = {};
+    bool dataReceived = false;
 
     for (;;)
     {
         /* Peek the latest sensor sample without consuming it. */
-        (void)xQueuePeek(sensorQueue, &sensorData, 0);
-
-        bool alarmActive = EvaluateTemperature(
-            sensorData.temperature,
-            SystemState_GetActivityState());
-
-        if (alarmActive)
+        if (xQueuePeek(sensorQueue, &sensorData, 0) == pdTRUE)
         {
-            HAL_GPIO_TogglePin(buzzerPort, buzzerPin);
+            dataReceived = true;
+        }
+
+        if (dataReceived)
+        {
+            bool alarmActive = sensorData.dhtValid &&
+                               EvaluateTemperature(
+                                   sensorData.temperature,
+                                   SystemState_GetActivityState());
+
+            if (alarmActive)
+            {
+                HAL_GPIO_TogglePin(buzzerPort, buzzerPin);
+            }
+            else
+            {
+                HAL_GPIO_WritePin(buzzerPort, buzzerPin, GPIO_PIN_RESET);
+            }
         }
         else
         {
+            /* No valid sensor data yet — keep buzzer OFF. */
             HAL_GPIO_WritePin(buzzerPort, buzzerPin, GPIO_PIN_RESET);
         }
 
