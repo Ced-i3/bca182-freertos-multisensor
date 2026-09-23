@@ -140,9 +140,16 @@ static void ssd1306_Command(uint8_t cmd)
 
 static void ssd1306_Data(const uint8_t *data, uint16_t len)
 {
-    uint8_t header = SSD1306_DATA;
-    HAL_I2C_Master_Transmit(oledI2C, SSD1306_I2C_ADDR << 1, &header, 1, 100);
-    HAL_I2C_Master_Transmit(oledI2C, SSD1306_I2C_ADDR << 1, const_cast<uint8_t *>(data), len, 100);
+    /*
+     * The SSD1306 I2C protocol requires the control byte (0x40)
+     * and all data bytes to be sent in a single I2C transaction.
+     * Sending them as separate transactions causes the display to
+     * discard the data, resulting in a permanently black screen.
+     */
+    uint8_t buf[1 + SSD1306_WIDTH];
+    buf[0] = SSD1306_DATA;
+    memcpy(buf + 1, data, len);
+    HAL_I2C_Master_Transmit(oledI2C, SSD1306_I2C_ADDR << 1, buf, len + 1, 100);
 }
 
 /* ============================================================
@@ -316,15 +323,31 @@ static void DisplayTask(void *pvParameters)
 
     for (;;)
     {
-        /* Peek latest sample without removing it from the queue. */
+        ActivityState activity = SystemState_GetActivityState();
+
+        /*
+         * Section 34 — INACTIVE Behavior: OLED off or blank.
+         * When the system is INACTIVE the display is cleared and
+         * only a minimal status line is shown.  The refresh period
+         * is relaxed to 500 ms to reduce unnecessary I2C traffic.
+         */
+        if (activity == ActivityState::INACTIVE)
+        {
+            Display_Clear();
+            Display_DrawString(3, 24, "-- INACTIVE --");
+            Display_Flush();
+            vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(500));
+            continue;
+        }
+
+        /* ACTIVE: peek latest sample without removing it from the queue. */
         (void)xQueuePeek(sensorQueue, &sensorData, 0);
 
         DisplayMode mode = Input_GetDisplayMode();
-        ActivityState activity = SystemState_GetActivityState();
 
         Display_Clear();
 
-        /* Row 0 — mode header */
+        /* Row 0 -- mode header */
         switch (mode)
         {
             case DisplayMode::TEMPERATURE:
@@ -341,7 +364,7 @@ static void DisplayTask(void *pvParameters)
                 break;
         }
 
-        /* Row 2 — value */
+        /* Row 2 -- value */
         switch (mode)
         {
             case DisplayMode::TEMPERATURE:
@@ -368,11 +391,8 @@ static void DisplayTask(void *pvParameters)
                 break;
         }
 
-        /* Row 5 — activity state */
-        if (activity == ActivityState::ACTIVE)
-            Display_DrawString(5, 0, "State: ACTIVE");
-        else
-            Display_DrawString(5, 0, "State: INACTIVE");
+        /* Row 5 -- always ACTIVE when we reach here. */
+        Display_DrawString(5, 0, "State: ACTIVE");
 
         Display_Flush();
 
