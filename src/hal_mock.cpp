@@ -16,6 +16,9 @@ GPIO_TypeDef _mock_gpioC;
 /* Stub for the global sensor queue referenced by alarm.cpp */
 QueueHandle_t sensorQueue = NULL;
 
+/* Stub for Serial_Print referenced by system_state.cpp */
+void Serial_Print(const char *) {}
+
 /*
  * PlatformIO's Unity test framework expects the test file to define
  * setup() and loop() (Arduino convention). Unity does NOT provide main().
