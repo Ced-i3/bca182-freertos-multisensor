@@ -6,6 +6,7 @@
 #include "sensors.h"
 #include "system_state.h"
 #include <cstring>
+#include <cstdio>
 
 extern "C" {
 #include "FreeRTOS.h"
@@ -58,7 +59,7 @@ void Serial_Print(const char *message)
         &huart1,
         reinterpret_cast<uint8_t *>(const_cast<char *>(message)),
         strlen(message),
-        HAL_MAX_DELAY
+        100
     );
 
     xSemaphoreGive(serialMutex);
@@ -136,10 +137,30 @@ void SensorTask(void *pvParameters)
             &sensorData.humidity);
         bool ldrReadOk = LDR_Read(&hadc1, &sensorData.lightLevel);
 
-        if (dhtReadOk && ldrReadOk)
+        sensorData.dhtValid = dhtReadOk;
+
+        if (dhtReadOk || ldrReadOk)
         {
             /* StateTask owns the synchronized motion/activity snapshot. */
             sensorData.motionDetected = SystemState_IsMotionDetected();
+
+            /*
+             * Print sensor readings to the serial monitor.
+             * Section 20 requires verifying temperature and humidity
+             * through the Serial Monitor.
+             */
+            {
+                char buf[80];
+                int len = snprintf(buf, sizeof(buf),
+                    "Temp: %.2f C  Hum: %.2f %%  Light: %d\r\n",
+                    sensorData.temperature,
+                    sensorData.humidity,
+                    sensorData.lightLevel);
+                if (len > 0)
+                {
+                    Serial_Print(buf);
+                }
+            }
 
             /*
              * Do not block this periodic task if no consumer is ready yet.
@@ -504,6 +525,37 @@ static void MX_I2C1_Init()
     if (HAL_I2C_Init(&hi2c1) != HAL_OK)
     {
         Error_Handler();
+    }
+}
+
+/* ---------------------------------------------------------
+ * SysTick Handler
+ *
+ * Combined HAL tick + FreeRTOS tick.  Called by the ARM
+ * Cortex-M3 SysTick interrupt at 1 kHz (configTICK_RATE_HZ).
+ *
+ * HAL_IncTick() advances the HAL millisecond counter used by
+ * HAL_Delay() and HAL_GetTick().
+ *
+ * xPortSysTickHandler() advances the FreeRTOS tick and
+ * unblocks any task waiting in vTaskDelay() or
+ * vTaskDelayUntil().
+ * --------------------------------------------------------- */
+extern "C" void xPortSysTickHandler(void);
+
+extern "C" void SysTick_Handler(void)
+{
+    HAL_IncTick();
+
+    /*
+     * Combined HAL + FreeRTOS tick handler.
+     * HAL_IncTick() advances the HAL millisecond counter.
+     * xPortSysTickHandler() advances the FreeRTOS tick and
+     * triggers context switches via PendSV.
+     */
+    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
+    {
+        xPortSysTickHandler();
     }
 }
 
