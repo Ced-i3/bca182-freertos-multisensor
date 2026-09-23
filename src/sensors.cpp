@@ -6,22 +6,23 @@ namespace
     uint16_t dhtPin = 0;
 
     /*
-     * DWT cycle counter gives us microsecond timing.
-     * STM32F103 is running at 72 MHz.
+     * Timing for DHT22 protocol.
+     *
+     * Uses HAL_Delay() for delays >= 1 ms (SysTick confirmed
+     * working via combined HAL + FreeRTOS handler).  A calibrated
+     * busy-wait loop handles sub-millisecond delays.
+     *
+     * At 72 MHz, each loop iteration is approximately 5 CPU
+     * cycles => ~14 iterations per microsecond.
      */
-    void DWT_Init()
-    {
-        CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-        DWT->CYCCNT = 0;
-        DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-    }
 
+    /*
+     * Sub-millisecond busy-wait delay using a calibrated loop.
+     */
     void delay_us(uint32_t microseconds)
     {
-        uint32_t start = DWT->CYCCNT;
-        uint32_t cycles = microseconds * (HAL_RCC_GetHCLKFreq() / 1000000U);
-
-        while ((DWT->CYCCNT - start) < cycles)
+        volatile uint32_t count = microseconds * 14;
+        while (count--)
         {
         }
     }
@@ -53,16 +54,20 @@ namespace
         GPIO_PinState state,
         uint32_t timeout_us)
     {
-        uint32_t start = DWT->CYCCNT;
-        uint32_t timeout_cycles =
-            timeout_us * (HAL_RCC_GetHCLKFreq() / 1000000U);
+        /*
+         * Use a loop counter for timeout.  Each iteration is
+         * approximately 5 CPU cycles at 72 MHz (~0.07 us).
+         * timeout_us * 14 gives approximately the right count.
+         */
+        volatile uint32_t count = timeout_us * 14;
 
         while (HAL_GPIO_ReadPin(dhtPort, dhtPin) != state)
         {
-            if ((DWT->CYCCNT - start) >= timeout_cycles)
+            if (count == 0)
             {
                 return false;
             }
+            --count;
         }
 
         return true;
@@ -140,8 +145,6 @@ void DHT22_Init(GPIO_TypeDef *port, uint16_t pin)
         __HAL_RCC_GPIOC_CLK_ENABLE();
     }
 
-    DWT_Init();
-
     SetPinOutput();
 
     /*
@@ -174,23 +177,17 @@ bool DHT22_Read(float *temperature, float *humidity)
     SetPinOutput();
 
     /*
-     * Pull the line LOW for at least 1 ms.
+     * Pull the line LOW for at least 1 ms (target 2 ms).
      */
     HAL_GPIO_WritePin(dhtPort, dhtPin, GPIO_PIN_RESET);
     HAL_Delay(2);
 
     /*
-     * Release the line.
+     * Release the line by switching the GPIO to input mode.
+     * In input mode with the internal pull-up, the pin floats
+     * HIGH.  This is the cleanest way to release an open-drain
+     * bus and lets the DHT22 model detect the host release.
      */
-    HAL_GPIO_WritePin(dhtPort, dhtPin, GPIO_PIN_SET);
-    delay_us(30);
-
-    /*
-     * -----------------------------------------------------
-     * 2. Wait for DHT22 response
-     * -----------------------------------------------------
-     */
-
     SetPinInput();
 
     /*
