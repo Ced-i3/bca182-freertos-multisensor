@@ -125,7 +125,7 @@ static const uint8_t Font5x7[][5] = {
     {0x10,0x08,0x08,0x10,0x08}, /* 126 ~ */
 };
 
-static I2C_HandleTypeDef *oledI2C = nullptr;
+static I2C_HandleTypeDef hi2c1;
 static uint8_t displayBuffer[SSD1306_WIDTH * SSD1306_PAGES];
 
 /* ============================================================
@@ -135,61 +135,43 @@ static uint8_t displayBuffer[SSD1306_WIDTH * SSD1306_PAGES];
 static void ssd1306_Command(uint8_t cmd)
 {
     uint8_t buf[2] = { SSD1306_CMD, cmd };
-    HAL_I2C_Master_Transmit(oledI2C, SSD1306_I2C_ADDR << 1, buf, 2, 100);
-}
-
-static void ssd1306_Data(const uint8_t *data, uint16_t len)
-{
-    /*
-     * The SSD1306 I2C protocol requires the control byte (0x40)
-     * and all data bytes to be sent in a single I2C transaction.
-     * Sending them as separate transactions causes the display to
-     * discard the data, resulting in a permanently black screen.
-     */
-    uint8_t buf[1 + SSD1306_WIDTH];
-    buf[0] = SSD1306_DATA;
-    memcpy(buf + 1, data, len);
-    HAL_I2C_Master_Transmit(oledI2C, SSD1306_I2C_ADDR << 1, buf, len + 1, 100);
+    HAL_I2C_Master_Transmit(&hi2c1, SSD1306_I2C_ADDR << 1, buf, 2, 100);
 }
 
 /* ============================================================
  * SSD1306 initialization
+ *
+ * Uses the friend's proven init sequence with horizontal
+ * addressing mode and maximum contrast.
  * ============================================================ */
 
-static void ssd1306_Init()
+static const uint8_t kInitSequence[] = {
+    0xAE,         /* display off */
+    0x20, 0x00,   /* memory addressing mode: horizontal */
+    0xB0,         /* page start 0 */
+    0xC8,         /* COM scan remapped */
+    0x00, 0x10,   /* column start 0 */
+    0x40,         /* display start line 0 */
+    0x81, 0xFF,   /* contrast max */
+    0xA1,         /* segment remap */
+    0xA6,         /* normal */
+    0xA8, 0x3F,   /* multiplex ratio: 64 rows */
+    0xA4,         /* display follows GDDRAM */
+    0xD3, 0x00,   /* display offset 0 */
+    0xD5, 0xF0,   /* clock divide / oscillator */
+    0xD9, 0x22,   /* pre-charge period */
+    0xDA, 0x12,   /* COM pins: alternative config */
+    0xDB, 0x20,   /* VCOMH deselect level */
+    0x8D, 0x14,   /* charge pump on */
+    0xAF,         /* display on */
+};
+
+static void ssd1306_Init(void)
 {
-    HAL_Delay(100);
-
-    ssd1306_Command(0xAE);
-    ssd1306_Command(0x20);
-    ssd1306_Command(0x10);
-    ssd1306_Command(0xB0);
-    ssd1306_Command(0xC8);
-    ssd1306_Command(0x00);
-    ssd1306_Command(0x10);
-    ssd1306_Command(0x40);
-    ssd1306_Command(0x81);
-    ssd1306_Command(0xCF);
-    ssd1306_Command(0xA1);
-    ssd1306_Command(0xA6);
-    ssd1306_Command(0xA8);
-    ssd1306_Command(0x3F);
-    ssd1306_Command(0xA4);
-    ssd1306_Command(0xD3);
-    ssd1306_Command(0x00);
-    ssd1306_Command(0xD5);
-    ssd1306_Command(0xF0);
-    ssd1306_Command(0xD9);
-    ssd1306_Command(0x22);
-    ssd1306_Command(0xDA);
-    ssd1306_Command(0x12);
-    ssd1306_Command(0xDB);
-    ssd1306_Command(0x20);
-    ssd1306_Command(0x8D);
-    ssd1306_Command(0x14);
-    ssd1306_Command(0xAF);
-
-    HAL_Delay(100);
+    for (uint16_t i = 0; i < sizeof(kInitSequence); i++)
+    {
+        ssd1306_Command(kInitSequence[i]);
+    }
 }
 
 /* ============================================================
@@ -203,16 +185,23 @@ void Display_Clear()
 
 static void Display_Flush()
 {
+    /*
+     * Set the full-screen address window, then stream all 1024
+     * bytes in 128-byte chunks.
+     */
     ssd1306_Command(0x21);
     ssd1306_Command(0x00);
-    ssd1306_Command(0x7F);
+    ssd1306_Command(SSD1306_WIDTH - 1);
     ssd1306_Command(0x22);
     ssd1306_Command(0x00);
-    ssd1306_Command(0x07);
+    ssd1306_Command(SSD1306_PAGES - 1);
 
+    uint8_t chunk[1 + SSD1306_WIDTH];
+    chunk[0] = SSD1306_DATA;
     for (uint8_t page = 0; page < SSD1306_PAGES; page++)
     {
-        ssd1306_Data(&displayBuffer[page * SSD1306_WIDTH], SSD1306_WIDTH);
+        memcpy(chunk + 1, &displayBuffer[page * SSD1306_WIDTH], SSD1306_WIDTH);
+        HAL_I2C_Master_Transmit(&hi2c1, SSD1306_I2C_ADDR << 1, chunk, sizeof(chunk), 100);
     }
 }
 
@@ -275,14 +264,13 @@ static void Display_DrawFloat(uint8_t page, uint8_t col, float value)
     int frac = static_cast<int>((value - static_cast<float>(whole)) * 10.0f);
     if (frac < 0) frac = -frac;
     Display_DrawInt(page, col, whole);
-    /* Count digits in integer part to find column after it. */
     int idx = 0;
     {
         int tmp = whole < 0 ? -whole : whole;
         if (tmp == 0)
             idx = 1;
         while (tmp > 0) { idx++; tmp /= 10; }
-        if (whole < 0) idx++; /* for the minus sign */
+        if (whole < 0) idx++;
     }
     int endCol = col + idx * 6;
     Display_DrawString(page, endCol, ".");
@@ -293,24 +281,38 @@ static void Display_DrawFloat(uint8_t page, uint8_t col, float value)
  * Public interface
  * ============================================================ */
 
-void Display_Init(I2C_HandleTypeDef *hi2c)
+void display_init(void)
 {
-    oledI2C = hi2c;
-    ssd1306_Init();
-    Display_Clear();
-    Display_Flush();
+    /*
+     * Set up I2C1 hardware only. The OLED panel is initialised
+     * later by DisplayTask (matching the friend's approach).
+     */
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_I2C1_CLK_ENABLE();
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    hi2c1.Instance = I2C1;
+    hi2c1.Init.ClockSpeed = 100000;
+    hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+    hi2c1.Init.OwnAddress1 = 0;
+    hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+    HAL_I2C_Init(&hi2c1);
 }
 
 /* ============================================================
  * DisplayTask
  *
  * Priority: 2
- * Stack:    512 words (2048 bytes — includes 1024-byte display buffer)
+ * Stack:    352 words
  * Period:   200 ms via vTaskDelayUntil()
  *
- * Uses xQueuePeek (non-destructive read) so SensorTask always
- * owns the queue data.  The display mode is read through the
- * mutex-protected Input_GetDisplayMode().
+ * The OLED panel is initialised here (inside the running task),
+ * matching the friend's proven approach.
  * ============================================================ */
 
 static void DisplayTask(void *pvParameters)
@@ -319,18 +321,22 @@ static void DisplayTask(void *pvParameters)
 
     extern QueueHandle_t sensorQueue;
     SensorData sensorData = {};
+
+    /*
+     * Initialise the OLED panel now that the scheduler is running.
+     * This matches the friend's approach and ensures I2C timeouts
+     * work correctly with the SysTick tick active.
+     */
+    ssd1306_Init();
+    Display_Clear();
+    Display_Flush();
+
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     for (;;)
     {
         ActivityState activity = SystemState_GetActivityState();
 
-        /*
-         * Section 34 — INACTIVE Behavior: OLED off or blank.
-         * When the system is INACTIVE the display is cleared and
-         * only a minimal status line is shown.  The refresh period
-         * is relaxed to 500 ms to reduce unnecessary I2C traffic.
-         */
         if (activity == ActivityState::INACTIVE)
         {
             Display_Clear();
@@ -340,7 +346,6 @@ static void DisplayTask(void *pvParameters)
             continue;
         }
 
-        /* ACTIVE: peek latest sample without removing it from the queue. */
         (void)xQueuePeek(sensorQueue, &sensorData, 0);
 
         DisplayMode mode = Input_GetDisplayMode();

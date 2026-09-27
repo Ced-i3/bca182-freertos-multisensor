@@ -5,13 +5,11 @@
 #include "sensors.h"
 #include "input.h"
 
-/* Shared I2C handle — defined in main.cpp. */
-extern I2C_HandleTypeDef hi2c1;
-
 /*
- * Initialize the SSD1306 OLED over I2C1 (PB6=SCL, PB7=SDA).
+ * Initialize I2C1 hardware (PB6=SCL, PB7=SDA).
+ * The OLED panel itself is initialised by DisplayTask.
  */
-void Display_Init(I2C_HandleTypeDef *hi2c);
+void display_init(void);
 
 /*
  * Clear the display buffer and push it to the OLED.
