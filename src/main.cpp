@@ -16,8 +16,6 @@ extern "C" {
 }
 
 UART_HandleTypeDef huart1;
-ADC_HandleTypeDef hadc1;
-I2C_HandleTypeDef hi2c1;
 
 SemaphoreHandle_t serialMutex;
 QueueHandle_t sensorQueue;
@@ -32,15 +30,9 @@ namespace
 
 /* Function prototypes */
 void SystemClock_Config();
-static void MX_GPIO_Init();
-static void MX_USART1_UART_Init();
-static void MX_ADC1_Init();
-static void MX_I2C1_Init();
-
 void TaskA(void *pvParameters);
 void TaskB(void *pvParameters);
 void SensorTask(void *pvParameters);
-
 void Error_Handler();
 
 /* ---------------------------------------------------------
@@ -67,9 +59,6 @@ void Serial_Print(const char *message)
 
 /* ---------------------------------------------------------
  * Task A
- *
- * Priority: 2
- * Delay: 1000 ms
  * --------------------------------------------------------- */
 void TaskA(void *pvParameters)
 {
@@ -77,25 +66,14 @@ void TaskA(void *pvParameters)
 
     for (;;)
     {
-        /*
-         * Toggle the onboard LED whenever Task A executes.
-         */
         HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-
         Serial_Print("Task A running\r\n");
-
-        /*
-         * Block Task A for 1 second.
-         */
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
 /* ---------------------------------------------------------
  * Task B
- *
- * Priority: 1
- * Delay: 1500 ms
  * --------------------------------------------------------- */
 void TaskB(void *pvParameters)
 {
@@ -104,23 +82,12 @@ void TaskB(void *pvParameters)
     for (;;)
     {
         Serial_Print("Task B running\r\n");
-
-        /*
-         * Block Task B for 1.5 seconds.
-         */
         vTaskDelay(pdMS_TO_TICKS(1500));
     }
 }
 
 /* ---------------------------------------------------------
  * SensorTask
- *
- * Priority: 2
- * Period:   2000 ms
- *
- * DHT22 uses PA1. The LDR analog output uses PA0 / ADC1 channel 0.
- * A failed DHT22 or ADC read is not sent, so consumers never receive
- * fabricated sensor values.
  * --------------------------------------------------------- */
 void SensorTask(void *pvParameters)
 {
@@ -135,20 +102,14 @@ void SensorTask(void *pvParameters)
         bool dhtReadOk = DHT22_Read(
             &sensorData.temperature,
             &sensorData.humidity);
-        bool ldrReadOk = LDR_Read(&hadc1, &sensorData.lightLevel);
+        bool ldrReadOk = LDR_Read(&sensorData.lightLevel);
 
         sensorData.dhtValid = dhtReadOk;
 
         if (dhtReadOk || ldrReadOk)
         {
-            /* StateTask owns the synchronized motion/activity snapshot. */
             sensorData.motionDetected = SystemState_IsMotionDetected();
 
-            /*
-             * Print sensor readings to the serial monitor.
-             * Section 20 requires verifying temperature and humidity
-             * through the Serial Monitor.
-             */
             {
                 char buf[80];
                 int len = snprintf(buf, sizeof(buf),
@@ -162,15 +123,20 @@ void SensorTask(void *pvParameters)
                 }
             }
 
-            /*
-             * Do not block this periodic task if no consumer is ready yet.
-             * The sample is dropped when the bounded queue is full.
-             */
             (void)xQueueSend(sensorQueue, &sensorData, 0);
         }
 
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(sensorPeriodMs));
     }
+}
+
+/* ---------------------------------------------------------
+ * HAL tick hook — called by the patched port's SysTick_Handler
+ * to keep HAL_GetTick() running.
+ * --------------------------------------------------------- */
+extern "C" void vApplicationTickHook(void)
+{
+    HAL_IncTick();
 }
 
 /* ---------------------------------------------------------
@@ -181,48 +147,41 @@ void app_main()
     /* Initialize STM32 HAL */
     HAL_Init();
 
-    /* Configure system clock */
+    /* Configure system clock (8 MHz HSI — empty config, matching friend) */
     SystemClock_Config();
 
-    /* Initialize GPIO */
-    MX_GPIO_Init();
+    /* USART1 TX only — PA9, 115200 8N1 */
+    {
+        GPIO_InitTypeDef GPIO_InitStruct = {0};
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+        __HAL_RCC_USART1_CLK_ENABLE();
 
-    /* Initialize USART1 */
-    MX_USART1_UART_Init();
+        GPIO_InitStruct.Pin = GPIO_PIN_9;
+        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+        HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    /* Initialize I2C1 for SSD1306 OLED (PB6=SCL, PB7=SDA). */
-    MX_I2C1_Init();
-
-    /* Initialize ADC1 channel 0 for the LDR on PA0. */
-    MX_ADC1_Init();
-
-    /* Initialize the DHT22 data line on PA1. */
-    DHT22_Init(GPIOA, GPIO_PIN_1);
-
-    /* PB0 is the PIR output pin. */
-    PIR_Init(GPIOB, GPIO_PIN_0);
-
-    /* PB10 and PB11 are the rotary-encoder CLK and DT inputs. */
-    Encoder_Init(GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11);
-
-    /* PB1 is the buzzer output pin. */
-    Buzzer_Init(GPIOB, GPIO_PIN_1);
+        huart1.Instance = USART1;
+        huart1.Init.BaudRate = 115200;
+        huart1.Init.WordLength = UART_WORDLENGTH_8B;
+        huart1.Init.StopBits = UART_STOPBITS_1;
+        huart1.Init.Parity = UART_PARITY_NONE;
+        huart1.Init.Mode = UART_MODE_TX;
+        huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+        huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+        HAL_UART_Init(&huart1);
+    }
 
     /*
      * Create the mutex before using Serial_Print().
      */
     serialMutex = xSemaphoreCreateMutex();
-
     if (serialMutex == nullptr)
     {
         Error_Handler();
     }
 
-    /*
-     * A four-element queue buffers SensorData samples for later consumers.
-     */
     sensorQueue = xQueueCreate(sensorQueueLength, sizeof(SensorData));
-
     if (sensorQueue == nullptr)
     {
         Error_Handler();
@@ -235,9 +194,26 @@ void app_main()
     Serial_Print("System starting...\r\n");
 
     /*
-     * Create Task A.
-     *
-     * Priority = 2
+     * Initialize peripherals — matching the friend's init order.
+     * sensors_init() sets up LED (PC13), ADC1 for LDR (PA1),
+     * and DHT22 with DWT timing (PA0).
+     */
+    sensors_init();
+
+    /* PIR on PA2 */
+    PIR_Init(GPIOA, GPIO_PIN_2);
+
+    /* Buzzer on PA8 via TIM1 PWM */
+    Buzzer_Init(GPIOA, GPIO_PIN_8);
+
+    /* Encoder CLK=PA3, DT=PA4 */
+    Encoder_Init(GPIOA, GPIO_PIN_3, GPIOA, GPIO_PIN_4);
+
+    /* I2C1 for OLED (PB6=SCL, PB7=SDA) — hardware only */
+    display_init();
+
+    /*
+     * Create Task A (priority 2, LED toggle + serial)
      */
     if (xTaskCreate(
             TaskA,
@@ -251,9 +227,7 @@ void app_main()
     }
 
     /*
-     * Create Task B.
-     *
-     * Priority = 1
+     * Create Task B (priority 1, serial diagnostic)
      */
     if (xTaskCreate(
             TaskB,
@@ -267,8 +241,7 @@ void app_main()
     }
 
     /*
-     * SensorTask uses the laboratory's suggested priority 2 and samples
-     * every two seconds using vTaskDelayUntil().
+     * SensorTask — priority 2, samples every 2 s using vTaskDelayUntil
      */
     if (xTaskCreate(
             SensorTask,
@@ -282,8 +255,8 @@ void app_main()
     }
 
     /*
-     * StateTask owns the ACTIVE/INACTIVE state machine. MotionTask is
-     * created after it so PIR notifications always have a valid receiver.
+     * StateTask owns the ACTIVE/INACTIVE state machine.
+     * MotionTask is created after it.
      */
     if (!SystemState_CreateTask() ||
         !MotionTask_Create() ||
@@ -293,12 +266,8 @@ void app_main()
     }
 
     /*
-     * Initialize the SSD1306 OLED display.
-     */
-    Display_Init(&hi2c1);
-
-    /*
-     * Create DisplayTask (priority 2) and AlarmTask (priority 2).
+     * DisplayTask and AlarmTask.
+     * DisplayTask will initialise the OLED panel itself.
      */
     if (!DisplayTask_Create() || !AlarmTask_Create())
     {
@@ -310,9 +279,6 @@ void app_main()
      */
     vTaskStartScheduler();
 
-    /*
-     * We should never reach this point.
-     */
     Error_Handler();
 }
 
@@ -321,6 +287,10 @@ void app_main()
  * --------------------------------------------------------- */
 int main()
 {
+    /* SystemInit() leaves VTOR at its reset value 0. Point it at flash
+     * so FreeRTOS can read the initial MSP from the vector table. */
+    SCB->VTOR = FLASH_BASE;
+
     app_main();
 
     while (1)
@@ -331,231 +301,30 @@ int main()
 /* ---------------------------------------------------------
  * STM32F103 Clock Configuration
  *
- * HSE = 8 MHz
- * PLL x9 = 72 MHz
+ * Empty — runs on HSI 8 MHz (reset default).
+ * Matching the friend's proven Wokwi configuration.
+ * The DWT cycle counter provides clock-independent timing,
+ * and the PWM prescaler is computed at runtime from
+ * HAL_RCC_GetPCLK2Freq().
  * --------------------------------------------------------- */
 void SystemClock_Config()
 {
-    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-    RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-    RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
-
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-    RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
-
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-    {
-        Error_Handler();
-    }
-
-    RCC_ClkInitStruct.ClockType =
-        RCC_CLOCKTYPE_HCLK |
-        RCC_CLOCKTYPE_SYSCLK |
-        RCC_CLOCKTYPE_PCLK1 |
-        RCC_CLOCKTYPE_PCLK2;
-
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-
-    if (HAL_RCC_ClockConfig(
-            &RCC_ClkInitStruct,
-            FLASH_LATENCY_2) != HAL_OK)
-    {
-        Error_Handler();
-    }
 }
 
 /* ---------------------------------------------------------
- * GPIO
- *
- * PC13 = Blue Pill onboard LED
+ * Error Handler
  * --------------------------------------------------------- */
-static void MX_GPIO_Init()
+void Error_Handler()
 {
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    __disable_irq();
 
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-
-    GPIO_InitStruct.Pin = GPIO_PIN_13;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-
-    HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-    /*
-     * Blue Pill onboard LED is active-low.
-     * SET = LED OFF.
-     */
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-}
-
-/* ---------------------------------------------------------
- * USART1
- *
- * PA9  = TX
- * PA10 = RX
- * Baud = 115200
- * --------------------------------------------------------- */
-static void MX_USART1_UART_Init()
-{
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_USART1_CLK_ENABLE();
-
-    /* PA9 - USART1 TX */
-    GPIO_InitStruct.Pin = GPIO_PIN_9;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-    /* PA10 - USART1 RX */
-    GPIO_InitStruct.Pin = GPIO_PIN_10;
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-    huart1.Instance = USART1;
-
-    huart1.Init.BaudRate = 115200;
-    huart1.Init.WordLength = UART_WORDLENGTH_8B;
-    huart1.Init.StopBits = UART_STOPBITS_1;
-    huart1.Init.Parity = UART_PARITY_NONE;
-    huart1.Init.Mode = UART_MODE_TX_RX;
-    huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-
-    if (HAL_UART_Init(&huart1) != HAL_OK)
+    while (1)
     {
-        Error_Handler();
-    }
-}
+        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
-/* ---------------------------------------------------------
- * ADC1 / LDR
- *
- * PA0 is ADC1 channel 0 and does not conflict with USART1 (PA9/PA10),
- * DHT22 (PA1), or the Blue Pill LED (PC13).
- * --------------------------------------------------------- */
-static void MX_ADC1_Init()
-{
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    ADC_ChannelConfTypeDef ADC_ChannelConfig = {0};
-
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_ADC1_CLK_ENABLE();
-
-    GPIO_InitStruct.Pin = GPIO_PIN_0;
-    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-    hadc1.Instance = ADC1;
-    hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-    hadc1.Init.ContinuousConvMode = DISABLE;
-    hadc1.Init.DiscontinuousConvMode = DISABLE;
-    hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-    hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-    hadc1.Init.NbrOfConversion = 1;
-
-    if (HAL_ADC_Init(&hadc1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-
-    ADC_ChannelConfig.Channel = ADC_CHANNEL_0;
-    ADC_ChannelConfig.Rank = ADC_REGULAR_RANK_1;
-    ADC_ChannelConfig.SamplingTime = ADC_SAMPLETIME_55CYCLES_5;
-
-    if (HAL_ADC_ConfigChannel(&hadc1, &ADC_ChannelConfig) != HAL_OK)
-    {
-        Error_Handler();
-    }
-
-    if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-}
-
-/* ---------------------------------------------------------
- * I2C1 / SSD1306 OLED
- *
- * PB6 = I2C1 SCL
- * PB7 = I2C1 SDA
- * Clock = 100 kHz (standard mode)
- * --------------------------------------------------------- */
-static void MX_I2C1_Init()
-{
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    __HAL_RCC_I2C1_CLK_ENABLE();
-
-    /* PB6 - I2C1 SCL */
-    GPIO_InitStruct.Pin   = GPIO_PIN_6;
-    GPIO_InitStruct.Mode  = GPIO_MODE_AF_OD;
-    GPIO_InitStruct.Pull  = GPIO_PULLUP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-    /* PB7 - I2C1 SDA */
-    GPIO_InitStruct.Pin = GPIO_PIN_7;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-    hi2c1.Instance             = I2C1;
-    hi2c1.Init.ClockSpeed      = 100000;
-    hi2c1.Init.DutyCycle       = I2C_DUTYCYCLE_2;
-    hi2c1.Init.OwnAddress1     = 0;
-    hi2c1.Init.AddressingMode  = I2C_ADDRESSINGMODE_7BIT;
-    hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-    hi2c1.Init.OwnAddress2     = 0;
-    hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-    hi2c1.Init.NoStretchMode   = I2C_NOSTRETCH_DISABLE;
-
-    if (HAL_I2C_Init(&hi2c1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-}
-
-/* ---------------------------------------------------------
- * SysTick Handler
- *
- * Combined HAL tick + FreeRTOS tick.  Called by the ARM
- * Cortex-M3 SysTick interrupt at 1 kHz (configTICK_RATE_HZ).
- *
- * HAL_IncTick() advances the HAL millisecond counter used by
- * HAL_Delay() and HAL_GetTick().
- *
- * xPortSysTickHandler() advances the FreeRTOS tick and
- * unblocks any task waiting in vTaskDelay() or
- * vTaskDelayUntil().
- * --------------------------------------------------------- */
-extern "C" void xPortSysTickHandler(void);
-
-extern "C" void SysTick_Handler(void)
-{
-    HAL_IncTick();
-
-    /*
-     * Combined HAL + FreeRTOS tick handler.
-     * HAL_IncTick() advances the HAL millisecond counter.
-     * xPortSysTickHandler() advances the FreeRTOS tick and
-     * triggers context switches via PendSV.
-     */
-    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
-    {
-        xPortSysTickHandler();
+        for (volatile uint32_t i = 0; i < 300000; i++)
+        {
+        }
     }
 }
 
@@ -569,9 +338,6 @@ extern "C" void vApplicationStackOverflowHook(
     (void)xTask;
     (void)pcTaskName;
 
-    /*
-     * Rapid LED blinking indicates a stack overflow.
-     */
     __disable_irq();
 
     while (1)
@@ -579,27 +345,6 @@ extern "C" void vApplicationStackOverflowHook(
         HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
         for (volatile uint32_t i = 0; i < 100000; i++)
-        {
-        }
-    }
-}
-
-/* ---------------------------------------------------------
- * Error Handler
- * --------------------------------------------------------- */
-void Error_Handler()
-{
-    __disable_irq();
-
-    while (1)
-    {
-        /*
-         * Rapid LED blinking indicates an initialization
-         * or FreeRTOS object creation failure.
-         */
-        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-
-        for (volatile uint32_t i = 0; i < 300000; i++)
         {
         }
     }

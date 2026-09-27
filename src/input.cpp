@@ -23,22 +23,6 @@ namespace
     SemaphoreHandle_t displayModeMutex = nullptr;
     DisplayMode selectedDisplayMode = DisplayMode::TEMPERATURE;
 
-    void EnablePortClock(GPIO_TypeDef *port)
-    {
-        if (port == GPIOA)
-        {
-            __HAL_RCC_GPIOA_CLK_ENABLE();
-        }
-        else if (port == GPIOB)
-        {
-            __HAL_RCC_GPIOB_CLK_ENABLE();
-        }
-        else if (port == GPIOC)
-        {
-            __HAL_RCC_GPIOC_CLK_ENABLE();
-        }
-    }
-
     GPIO_PinState ReadClock()
     {
         return HAL_GPIO_ReadPin(clockPort, clockPin);
@@ -119,16 +103,13 @@ void Encoder_Init(
     dataPort = newDataPort;
     dataPin = newDataPin;
 
-    EnablePortClock(clockPort);
-    EnablePortClock(dataPort);
+    __HAL_RCC_GPIOA_CLK_ENABLE();
 
-    GPIO_InitStruct.Pin = clockPin;
+    /* PA3 (CLK), PA4 (DT) — inputs with pull-ups */
+    GPIO_InitStruct.Pin = clockPin | dataPin;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(clockPort, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = dataPin;
-    HAL_GPIO_Init(dataPort, &GPIO_InitStruct);
 }
 
 DisplayMode NextDisplayMode(DisplayMode currentMode)

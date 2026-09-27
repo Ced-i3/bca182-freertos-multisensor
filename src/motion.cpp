@@ -40,22 +40,11 @@ void PIR_Init(GPIO_TypeDef *port, uint16_t pin)
     pirPort = port;
     pirPin = pin;
 
-    if (port == GPIOA)
-    {
-        __HAL_RCC_GPIOA_CLK_ENABLE();
-    }
-    else if (port == GPIOB)
-    {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-    }
-    else if (port == GPIOC)
-    {
-        __HAL_RCC_GPIOC_CLK_ENABLE();
-    }
+    __HAL_RCC_GPIOA_CLK_ENABLE();
 
     GPIO_InitStruct.Pin = pin;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
 
     HAL_GPIO_Init(port, &GPIO_InitStruct);
 }
