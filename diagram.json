@@ -1,92 +1,39 @@
 {
   "version": 1,
-  "author": "BCA182",
+  "author": "BCA182 Student",
   "editor": "wokwi",
   "parts": [
-    {
-      "type": "board-stm32-bluepill",
-      "id": "bluepill",
-      "top": 0,
-      "left": 0,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-dht22",
-      "id": "dht22",
-      "top": -80,
-      "left": 300,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-photoresistor-sensor",
-      "id": "ldr",
-      "top": 20,
-      "left": 300,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-pir-motion-sensor",
-      "id": "pir",
-      "top": 120,
-      "left": 300,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-ky-040",
-      "id": "encoder",
-      "top": 220,
-      "left": 300,
-      "attrs": {}
-    },
-    {
-      "type": "board-ssd1306",
-      "id": "oled",
-      "top": 10,
-      "left": -180,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-buzzer",
-      "id": "buzzer",
-      "top": 320,
-      "left": 300,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "r1",
-      "top": -30,
-      "left": 260,
-      "attrs": { "value": "10000" }
-    }
+    { "type": "board-stm32-bluepill", "id": "stm32", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht", "top": -120, "left": 160, "attrs": {} },
+    { "type": "wokwi-photoresistor-sensor", "id": "ldr", "top": 30, "left": 160, "attrs": {} },
+    { "type": "wokwi-pir-motion-sensor", "id": "pir", "top": 180, "left": 160, "attrs": {} },
+    { "type": "board-ssd1306", "id": "oled", "top": -120, "left": -180, "attrs": {} },
+    { "type": "wokwi-ky-040", "id": "encoder", "top": 30, "left": -180, "attrs": {} },
+    { "type": "wokwi-buzzer", "id": "buzzer", "top": 180, "left": -180, "attrs": {} }
   ],
   "connections": [
-    [ "dht22:VCC", "bluepill:3V3.1", "red", [ "v0" ] ],
-    [ "dht22:GND", "bluepill:GND.1", "black", [ "v0" ] ],
-    [ "dht22:SDA", "bluepill:A1", "green", [ "v0" ] ],
-    [ "ldr:VCC", "bluepill:3V3.1", "red", [ "v0" ] ],
-    [ "ldr:GND", "bluepill:GND.1", "black", [ "v0" ] ],
-    [ "ldr:AO", "bluepill:A0", "blue", [ "v0" ] ],
-    [ "pir:VCC", "bluepill:3V3.1", "red", [ "v0" ] ],
-    [ "pir:GND", "bluepill:GND.1", "black", [ "v0" ] ],
-    [ "pir:OUT", "bluepill:B0", "purple", [ "v0" ] ],
-    [ "encoder:VCC", "bluepill:3V3.1", "red", [ "v0" ] ],
-    [ "encoder:GND", "bluepill:GND.1", "black", [ "v0" ] ],
-    [ "encoder:CLK", "bluepill:B10", "orange", [ "v0" ] ],
-    [ "encoder:DT", "bluepill:B11", "yellow", [ "v0" ] ],
-    [ "oled:VCC", "bluepill:3V3.1", "red", [ "v0" ] ],
-    [ "oled:GND", "bluepill:GND.1", "black", [ "v0" ] ],
-    [ "oled:SCL", "bluepill:B6", "cyan", [ "v0" ] ],
-    [ "oled:SDA", "bluepill:B7", "magenta", [ "v0" ] ],
-    [ "buzzer:2", "bluepill:B1", "orange", [ "v0" ] ],
-    [ "buzzer:1", "bluepill:GND.1", "black", [ "v0" ] ],
-    [ "bluepill:A9", "$serialMonitor:RX", "", [ "v0" ] ],
-    [ "bluepill:A10", "$serialMonitor:TX", "", [ "v0" ] ],
-    [ "r1:1", "bluepill:3V3.1", "red", [ "v0" ] ],
-    [ "r1:2", "bluepill:A1", "green", [ "v0" ] ]
+    [ "stm32:3V3.1", "dht:VCC", "red", [ "v0" ] ],
+    [ "stm32:GND.1", "dht:GND", "black", [ "v0" ] ],
+    [ "stm32:A0", "dht:SDA", "green", [ "v0" ] ],
+    [ "stm32:3V3.1", "ldr:VCC", "red", [ "v0" ] ],
+    [ "stm32:GND.1", "ldr:GND", "black", [ "v0" ] ],
+    [ "stm32:A1", "ldr:AO", "yellow", [ "v0" ] ],
+    [ "stm32:3V3.1", "pir:VCC", "red", [ "v0" ] ],
+    [ "stm32:GND.1", "pir:GND", "black", [ "v0" ] ],
+    [ "stm32:A2", "pir:OUT", "purple", [ "v0" ] ],
+    [ "stm32:3V3.1", "oled:VCC", "red", [ "v0" ] ],
+    [ "stm32:GND.1", "oled:GND", "black", [ "v0" ] ],
+    [ "stm32:B6", "oled:SCL", "blue", [ "v0" ] ],
+    [ "stm32:B7", "oled:SDA", "orange", [ "v0" ] ],
+    [ "stm32:3V3.1", "encoder:VCC", "red", [ "v0" ] ],
+    [ "stm32:GND.1", "encoder:GND", "black", [ "v0" ] ],
+    [ "stm32:A3", "encoder:CLK", "cyan", [ "v0" ] ],
+    [ "stm32:A4", "encoder:DT", "magenta", [ "v0" ] ],
+    [ "stm32:A5", "encoder:SW", "white", [ "v0" ] ],
+    [ "stm32:GND.1", "buzzer:1", "black", [ "v0" ] ],
+    [ "stm32:A8", "buzzer:2", "red", [ "v0" ] ],
+    [ "stm32:A9", "$serialMonitor:RX", "", [] ],
+    [ "stm32:A10", "$serialMonitor:TX", "", [] ]
   ],
-  "serialMonitor": {
-    "display": "always",
-    "newline": "lf"
-  }
+  "serialMonitor": { "display": "always", "newline": "crlf" }
 }
