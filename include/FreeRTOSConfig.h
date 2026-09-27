@@ -1,15 +1,18 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
+#include <stdint.h>
+extern uint32_t SystemCoreClock;
+
 /*-----------------------------------------------------------
  * Application-specific definitions.
  *----------------------------------------------------------*/
 
 #define configUSE_PREEMPTION                    1
 #define configUSE_IDLE_HOOK                    0
-#define configUSE_TICK_HOOK                    0
+#define configUSE_TICK_HOOK                    1
 
-#define configCPU_CLOCK_HZ                     ( ( unsigned long ) 72000000 )
+#define configCPU_CLOCK_HZ                     ( SystemCoreClock )
 #define configTICK_RATE_HZ                     ( ( TickType_t ) 1000 )
 
 #define configMAX_PRIORITIES                   5
@@ -29,11 +32,6 @@
 #define configUSE_QUEUE_SETS                   0
 #define configUSE_TIME_SLICING                 1
 
-#define configUSE_TIMERS                       1
-#define configTIMER_TASK_PRIORITY              2
-#define configTIMER_QUEUE_LENGTH               5
-#define configTIMER_TASK_STACK_DEPTH           128
-
 #define configUSE_EVENT_GROUPS                 1
 
 #define configUSE_TASK_NOTIFICATIONS           1
@@ -44,6 +42,9 @@
 
 #define configSUPPORT_DYNAMIC_ALLOCATION       1
 #define configSUPPORT_STATIC_ALLOCATION        0
+
+/* The patched port does not use the CLZ-based task selection. */
+#define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 
 /* Cortex-M3 interrupt configuration */
 
@@ -70,11 +71,8 @@
 /*-----------------------------------------------------------*/
 
 /*
- * Map FreeRTOS handler names to the STM32 vector table names.
- * Without these defines, the PendSV and SVC interrupts fall
- * through to Default_Handler and context switches never happen.
+ * The patched port (lib/freertos_port_patch) defines SVC_Handler and
+ * SysTick_Handler directly in port.c. No handler name remapping is needed.
  */
-#define vPortSVCHandler    SVC_Handler
-#define xPortPendSVHandler PendSV_Handler
 
 #endif /* FREERTOS_CONFIG_H */
