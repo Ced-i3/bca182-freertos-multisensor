@@ -269,8 +269,6 @@ the Cortex-M3.
 
 ## 10. State Machine
 
-![ACTIVE / INACTIVE State Machine](docs/images/state-machine.png)
-
 - **ACTIVE**: System begins in this state. Encoder navigation is enabled.
   Alarm evaluates temperature against thresholds. Motion is tracked and
   displayed. Display refreshes at 200 ms.
