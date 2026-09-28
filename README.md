@@ -39,11 +39,16 @@ pages via a rotary encoder.
 
 ![System Architecture](docs/images/system-architecture.png)
 
-### Wokwi Running System / Circuit
+### Wokwi Circuit / Schematic
 
-![Wokwi Running System / Circuit](docs/images/wokwi-circuit.png)
+![Wokwi Circuit Schematic](docs/images/Schematic.png)
 
-*The Wokwi simulation starts and prints "BCA182 FreeRTOS Multisensor" and "System starting..." to the serial monitor. The screenshot demonstrates the configured and running Wokwi simulation. Runtime behavior of individual sensors, OLED output, and encoder interaction was not reliably verified through Wokwi simulation.*
+*The Wokwi simulation starts and prints "BCA182 FreeRTOS Multisensor" and "System starting..." to the serial monitor. The schematic shows the configured Wokwi circuit with all sensor and actuator connections. Runtime behavior of individual sensors, OLED output, and encoder interaction was not reliably verified through Wokwi simulation.*
+
+### Laboratory Report
+
+The full laboratory report is available at
+[docs/images/laboratory-report-final.pdf](docs/images/laboratory-report-final.pdf).
 
 ## FreeRTOS Architecture
 
@@ -185,12 +190,11 @@ page changes occur while INACTIVE.
 +-- lib/
 |   +-- FreeRTOS/           # FreeRTOS kernel sources (ARM_CM3 port)
 +-- docs/
-|   +-- laboratory-report-final.pdf
 |   +-- images/
+|       +-- laboratory-report-final.pdf
+|       +-- Schematic.png
 |       +-- system-architecture.png
-|       +-- task-communication.png
 |       +-- state-machine.png
-|       +-- wokwi-circuit.png
 +-- diagram.json            # Wokwi circuit diagram
 +-- wokwi.toml              # Wokwi firmware paths
 +-- platformio.ini          # Build configuration
@@ -281,19 +285,35 @@ Wokwi simulates the STM32 Blue Pill, DHT22, LDR, PIR sensor, KY-040
 rotary encoder, SSD1306 OLED, and buzzer using the pin connections defined
 in `diagram.json`.
 
-## Known Wokwi Limitations
+## Limitations
 
-- **Serial output** is not reliably observable due to simulation timing
-  constraints. Runtime correctness of UART diagnostic messages was not
-  verified through Wokwi.
-- **OLED display output** and other visual outputs (buzzer sound, LED blink
-  patterns) were not reliably verifiable in Wokwi simulation. Functional
-  correctness is based on code review and static analysis.
-- **LDR readings** are a relative 0-100 scale derived from the 12-bit ADC
-  value; they are not calibrated to lux.
-- **Native unit tests** use small HAL and FreeRTOS mocks (`stm32f1xx_hal.h`
-  and `FreeRTOS.h` at the project root) that stub all hardware access. The
-  mocks compile to empty on STM32 builds via `#ifdef UNIT_TEST` guards.
+- **LDR relative light level:** The photoresistor (LDR) reports a relative
+  0–100 scale derived from the 12-bit ADC value; it is not calibrated to
+  absolute lux.
+- **Functional test coverage:** Not every FT-01 to FT-10 functional test has
+  been individually verified through runtime evidence. Some tests are
+  confirmed through code review and static analysis only.
+- **DHT22 verification:** DHT22 temperature and humidity readings were not
+  fully individually verified in the presented runtime evidence. Correctness
+  is inferred from code review, unit tests of downstream logic, and static
+  analysis.
+- **Wokwi DHT22 simulation behaviour:** In the current Wokwi setup, when the
+  DHT22 temperature value is changed in the simulation, the simulation must
+  be restarted for the changed temperature setting to be reflected correctly.
+- **Physical hardware differences:** Physical hardware behaviour may differ
+  from the Wokwi simulation because of wiring differences, electrical
+  characteristics, timing variations, and sensor tolerances.
+- **Serial output:** Serial output is not reliably observable in Wokwi due to
+  simulation timing constraints. Runtime correctness of UART diagnostic
+  messages was not verified through Wokwi.
+- **OLED and actuator output:** OLED display output and other visual outputs
+  (buzzer sound, LED blink patterns) were not reliably verifiable in Wokwi
+  simulation. Functional correctness is based on code review and static
+  analysis.
+- **Native unit test mocks:** Native unit tests use small HAL and FreeRTOS
+  mocks (`stm32f1xx_hal.h` and `FreeRTOS.h` at the project root) that stub
+  all hardware access. The mocks compile to empty on STM32 builds via
+  `#ifdef UNIT_TEST` guards.
 
 ## Fault Experiments
 
